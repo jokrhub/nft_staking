@@ -6,8 +6,6 @@ authors = []
 [addresses]
 
 [dev-addresses]
-nft_skaking_addr=552cdb8b245938e3e19303dbf77f0b900153fff2dab96f96586b0c335bb8a111
-source_addr="0xbeef"
 
 [dependencies.AptosFramework]
 git = "https://github.com/aptos-labs/aptos-core.git"

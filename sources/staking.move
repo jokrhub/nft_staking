@@ -128,7 +128,7 @@ module nft_skaking_addr::staking {
         create_token_id_raw(signer::address_of(creator), get_collection_name(), get_token_name(), 0)
     }
 
-    #[test(staker = @0x123,  resource_account = @0xc3bb8488ab1a5815a9d543d7e41b0e0df46a7396f89b22821f07a4362f75ddc5, nft_skaking_addr = 0xcafe)]
+    #[test(staker = @0x123)]
     public entry fun test_stake(admin: signer) acquires TodoList {
         account::create_account_for_test(signer::address_of(&staker));
 
