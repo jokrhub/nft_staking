@@ -15,4 +15,4 @@
 `aptos move test --skip-fetch-latest-git-deps --skip-attribute-checks`
 
 ## Publish
-`aptos move create-resource-account-and-publish-package --seed [seed] --address-name nft_skaking --profile default  --skip-fetch-latest-git-deps`
+`aptos move create-resource-account-and-publish-package --seed [seed] --address-name staking --profile default  --skip-fetch-latest-git-deps`

@@ -1,4 +1,4 @@
-module nft_skaking_addr::staking {
+module nft_staking_addr::staking {
 
     use aptos_std::table::{Self, Table};
     use std::string::{String};
@@ -65,7 +65,7 @@ module nft_skaking_addr::staking {
     public entry fun stake(account: &signer, creator: address, collection_name: String, token_name: String, token_property_version: u64) acquires ModuleData, UserStakeInfo {
 
         // borrow resource account signer cap
-        let module_data = borrow_global_mut<ModuleData>(@nft_skaking_addr);
+        let module_data = borrow_global_mut<ModuleData>(@nft_staking_addr);
         let resource_signer = account::create_signer_with_capability(&module_data.signer_cap);
 
         let signer_address = signer::address_of(account);
@@ -125,7 +125,7 @@ module nft_skaking_addr::staking {
         coin::register<AptosCoin>(staker);
 
         // borrow signer cap of resource account
-        let module_data = borrow_global_mut<ModuleData>(@nft_skaking_addr);
+        let module_data = borrow_global_mut<ModuleData>(@nft_staking_addr);
         let resource_signer = account::create_signer_with_capability(&module_data.signer_cap);
 
         let staker_address = signer::address_of(staker);
@@ -167,7 +167,7 @@ module nft_skaking_addr::staking {
     public entry fun unstake(staker: &signer, creator: address, collection_name: String, token_name: String, token_property_version: u64) acquires ModuleData, UserStakeInfo {
 
         // borrow signer cap for resource account
-        let module_data = borrow_global_mut<ModuleData>(@nft_skaking_addr);
+        let module_data = borrow_global_mut<ModuleData>(@nft_staking_addr);
         let resource_signer = account::create_signer_with_capability(&module_data.signer_cap);
 
         let token_id = token::create_token_id_raw(creator, collection_name, token_name, token_property_version);
@@ -202,7 +202,7 @@ module nft_skaking_addr::staking {
         assert!(admin_address == @admin_addr, error::permission_denied(ENOT_ADMIN));
 
         // get resource account address
-        let module_data = borrow_global_mut<ModuleData>(@nft_skaking_addr);
+        let module_data = borrow_global_mut<ModuleData>(@nft_staking_addr);
         let resource_signer = account::create_signer_with_capability(&module_data.signer_cap);
         let resource_account_address = signer::address_of(&resource_signer);
 
@@ -219,7 +219,7 @@ module nft_skaking_addr::staking {
         assert!(admin_address == @admin_addr, error::permission_denied(ENOT_ADMIN));
 
         // borrow signer cap of resource account
-        let module_data = borrow_global_mut<ModuleData>(@nft_skaking_addr);
+        let module_data = borrow_global_mut<ModuleData>(@nft_staking_addr);
         let resource_signer = account::create_signer_with_capability(&module_data.signer_cap);
 
         // transfer coins from resource account to admin
@@ -231,7 +231,7 @@ module nft_skaking_addr::staking {
 
     // function to get amount of reward coins in the protocol
     public fun get_funds() : u64 acquires ModuleData {
-        let module_data = borrow_global_mut<ModuleData>(@nft_skaking_addr);
+        let module_data = borrow_global_mut<ModuleData>(@nft_staking_addr);
         let resource_signer = account::create_signer_with_capability(&module_data.signer_cap);
         let resource_account_address = signer::address_of(&resource_signer);
 
@@ -361,7 +361,7 @@ module nft_skaking_addr::staking {
         token_id
     }
 
-    #[test (origin_account = @source_addr, resource_account = @nft_skaking_addr, admin = @admin_addr, creator = @0x111, nft_staker = @0x123, aptos_framework = @0x1)]
+    #[test (origin_account = @source_addr, resource_account = @nft_staking_addr, admin = @admin_addr, creator = @0x111, nft_staker = @0x123, aptos_framework = @0x1)]
     public entry fun test_end_to_end (
         origin_account: &signer,
         resource_account: &signer,
@@ -380,7 +380,7 @@ module nft_skaking_addr::staking {
         let nft_staker_address = signer::address_of(nft_staker);
 
         // mint coins for the admin and deposit into protocol
-        set_up_mint_coins(admin, resource_account, aptos_framework);
+        crea(admin, resource_account, aptos_framework);
         deposit_funds(admin, 1000);
 
         assert!(coin::balance<AptosCoin>(resource_account_address) == 1000, 1);
@@ -446,7 +446,7 @@ module nft_skaking_addr::staking {
         assert!(coin::balance<AptosCoin>(resource_account_address) == 990, 1);
     }
 
-    #[test (origin_account = @source_addr, resource_account = @nft_skaking_addr, admin = @admin_addr, creator = @0x111, nft_staker = @0x123, aptos_framework = @0x1)]
+    #[test (origin_account = @source_addr, resource_account = @nft_staking_addr, admin = @admin_addr, creator = @0x111, nft_staker = @0x123, aptos_framework = @0x1)]
     public entry fun test_admin_functions(
         origin_account: &signer,
         resource_account: &signer,
@@ -479,7 +479,7 @@ module nft_skaking_addr::staking {
         assert!(get_funds() == 200, 1);
     }
 
-    #[test (origin_account = @source_addr, resource_account = @nft_skaking_addr, admin = @admin_addr, creator = @0x111, nft_staker = @0x123, aptos_framework = @0x1)]
+    #[test (origin_account = @source_addr, resource_account = @nft_staking_addr, admin = @admin_addr, creator = @0x111, nft_staker = @0x123, aptos_framework = @0x1)]
     #[expected_failure]
     public entry fun test_failure_claim_for_unstaked_token(
         origin_account: &signer,
@@ -505,7 +505,7 @@ module nft_skaking_addr::staking {
         
     }
 
-    #[test (origin_account = @source_addr, resource_account = @nft_skaking_addr, admin = @admin_addr, creator = @0x111, nft_staker = @0x123, aptos_framework = @0x1)]
+    #[test (origin_account = @source_addr, resource_account = @nft_staking_addr, admin = @admin_addr, creator = @0x111, nft_staker = @0x123, aptos_framework = @0x1)]
     #[expected_failure]
     public entry fun test_failure_double_unstake(
         origin_account: &signer,
@@ -532,7 +532,7 @@ module nft_skaking_addr::staking {
     }
 
 
-    #[test (origin_account = @source_addr, resource_account = @nft_skaking_addr, admin = @admin_addr, creator = @0x111, nft_staker = @0x123, aptos_framework = @0x1)]
+    #[test (origin_account = @source_addr, resource_account = @nft_staking_addr, admin = @admin_addr, creator = @0x111, nft_staker = @0x123, aptos_framework = @0x1)]
     #[expected_failure]
     public entry fun test_failure_double_stake(
         origin_account: &signer,
