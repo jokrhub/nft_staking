@@ -4,9 +4,8 @@ version = "1.0.0"
 authors = []
 
 [addresses]
-admin_addr='0xbeef'
-source_addr='0xcafe'
-nft_staking_addr='0xc3bb8488ab1a5815a9d543d7e41b0e0df46a7396f89b22821f07a4362f75ddc5'
+admin_addr='8e22ae7e98746de9f0ec682253dbfb9709a13d0793a8a653234c16f0a7e471da'
+source_addr='c4b539a5308501abee6a3f2c6bb7c0014c479427e78436d28d69d66165cd2898'
 
 [dev-addresses]
 

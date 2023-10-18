@@ -21,6 +21,7 @@ module nft_staking_addr::staking {
     const ETOKEN_ALREADY_STAKED: u64 = 0;
     const ETOKEN_NOT_FOUND: u64 = 1;
     const ENOT_ADMIN: u64 = 2;
+    const ENOT_CONTAIN: u64 = 3;
 
     // Stores information about the staked token
     struct StakeInfo has store, drop, copy {
@@ -32,6 +33,7 @@ module nft_staking_addr::staking {
     // Holds all staked tokens information and related events
     struct UserStakeInfo has key {
         stakes: Table<TokenId, StakeInfo>,
+        stake_keys: vector<TokenId>,
         stake_event: event::EventHandle<StakeInfo>,
         unstake_event: event::EventHandle<StakeInfo>,
         claim_rewards_event: event::EventHandle<StakeInfo>
@@ -54,6 +56,7 @@ module nft_staking_addr::staking {
         // creates a new userStakeInfo table under staker account
         let userStakeInfo = UserStakeInfo {
             stakes: table::new(),
+            stake_keys: vector::empty<TokenId>(),
             stake_event: account::new_event_handle<StakeInfo>(staker),
             unstake_event: account::new_event_handle<StakeInfo>(staker),
             claim_rewards_event: account::new_event_handle<StakeInfo>(staker)
@@ -97,6 +100,7 @@ module nft_staking_addr::staking {
 
         // add stake_info to stakes list
         table::upsert(&mut userStakeInfo.stakes, token_id, copy stake_info);
+        vector::push_back(&mut userStakeInfo.stake_keys, token_id);
 
         // emit a stake event
         event::emit_event<StakeInfo>(
@@ -117,7 +121,7 @@ module nft_staking_addr::staking {
     // Simple liner funtion based on time to calculate staking rewards.
     // This can be update to have complex reward calculation
     fun get_pending_rewards(current_time: u64, last_updated: u64): u64 {
-        (current_time - last_updated) * EMMISSION_RATE
+        ((current_time - last_updated) * EMMISSION_RATE) / 10
     }
 
     public fun claimRewards(staker: &signer, token_id: TokenId) acquires ModuleData, UserStakeInfo {
@@ -152,8 +156,29 @@ module nft_staking_addr::staking {
         stake_record.pendingRewards = 0;   
     }
 
+     public entry fun updateRewards(staker: &signer, creator: address, collection_name: String, token_name: String, token_property_version: u64) acquires UserStakeInfo {
+
+        let token_id = token::create_token_id_raw(
+            creator,
+            collection_name,
+            token_name,
+            token_property_version,
+        );
+
+        let staker_address = signer::address_of(staker);
+        let userStakeInfo = borrow_global_mut<UserStakeInfo>(staker_address);
+
+        // ensure token is actually staked
+        assert!(table::contains(&userStakeInfo.stakes, token_id), error::not_found(ETOKEN_NOT_FOUND));
+
+        let stake_record = table::borrow_mut(&mut userStakeInfo.stakes, token_id);
+
+        // update the rewards for token
+        update_rewards(stake_record);
+    }
+
     // entry function for user to claim rewards for a token anytime
-    public entry fun claimRewardsForUser(staker: &signer, creator: address, collection_name: String, token_name: String, token_property_version: u64)  acquires ModuleData, UserStakeInfo {
+    public entry fun claimRewardsForToken(staker: &signer, creator: address, collection_name: String, token_name: String, token_property_version: u64)  acquires ModuleData, UserStakeInfo {
         let token_id = token::create_token_id_raw(
             creator,
             collection_name,
@@ -186,6 +211,10 @@ module nft_staking_addr::staking {
         // remove the stake information from staker account
         let userStakeInfo = borrow_global_mut<UserStakeInfo>(staker_address);
         let stake_record = table::remove(&mut userStakeInfo.stakes, token_id);
+
+        let (found, index) = vector::index_of(&mut userStakeInfo.stake_keys, &token_id);
+        assert!(found, error::invalid_argument(ENOT_CONTAIN));
+        vector::remove(&mut userStakeInfo.stake_keys, index);
 
         // emit a unstake event
         event::emit_event<StakeInfo>(
@@ -380,7 +409,7 @@ module nft_staking_addr::staking {
         let nft_staker_address = signer::address_of(nft_staker);
 
         // mint coins for the admin and deposit into protocol
-        crea(admin, resource_account, aptos_framework);
+        set_up_mint_coins(admin, resource_account, aptos_framework);
         deposit_funds(admin, 1000);
 
         assert!(coin::balance<AptosCoin>(resource_account_address) == 1000, 1);
@@ -419,15 +448,16 @@ module nft_staking_addr::staking {
         coin::register<AptosCoin>(nft_staker);
 
         // claim the staking rewards
-        claimRewardsForUser(nft_staker, creator, collection, token_name, 0);
+        claimRewardsForToken(nft_staker, creator, collection, token_name, 0);
         let claim_rewards_event_count = event::counter(&borrow_global<UserStakeInfo>(nft_staker_address).claim_rewards_event);
         assert!(claim_rewards_event_count == 1, 1);
 
         assert!(view_pending_rewards(nft_staker_address, token_id) == 0, 1);
 
         // ensure user got actual reward amount according to the staking duration 
-        assert!(coin::balance<AptosCoin>(nft_staker_address) == 10, 1);
-        assert!(coin::balance<AptosCoin>(resource_account_address) == 990, 1);
+
+        assert!(coin::balance<AptosCoin>(nft_staker_address) == 1, 1);
+        assert!(coin::balance<AptosCoin>(resource_account_address) == 999, 1);
 
         // unstake the NFT, but rewards have been already claimed, so no more rewards
         unstake(nft_staker, creator, collection, token_name, 0);
@@ -442,8 +472,8 @@ module nft_staking_addr::staking {
         assert!(module_balance_unstake == module_balance_before, 1);
 
         // ensure rewards for user are same, coz user already claimed
-        assert!(coin::balance<AptosCoin>(nft_staker_address) == 10, 1);
-        assert!(coin::balance<AptosCoin>(resource_account_address) == 990, 1);
+        assert!(coin::balance<AptosCoin>(nft_staker_address) == 1, 1);
+        assert!(coin::balance<AptosCoin>(resource_account_address) == 999, 1);
     }
 
     #[test (origin_account = @source_addr, resource_account = @nft_staking_addr, admin = @admin_addr, creator = @0x111, nft_staker = @0x123, aptos_framework = @0x1)]
@@ -501,7 +531,7 @@ module nft_staking_addr::staking {
         
         // ensure no rewards for unstaked tokens
         unstake(nft_staker, creator, collection, token_name, 0);
-        claimRewardsForUser(nft_staker, creator, collection, token_name, 0);
+        claimRewardsForToken(nft_staker, creator, collection, token_name, 0);
         
     }
 
@@ -529,6 +559,7 @@ module nft_staking_addr::staking {
         unstake(nft_staker, creator, collection, token_name, 0);
         unstake(nft_staker, creator, collection, token_name, 0);
         
+
     }
 
 

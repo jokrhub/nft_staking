@@ -4,7 +4,7 @@ script {
     use std::string::{Self, String};
     use std::bcs;
     use std::vector;
-    use aptos_token::token::{Self, TokenId};
+    use aptos_token::token::{Self};
 
     fun create_collection_and_token(creator: &signer, nft_staker_address: address) {
 
