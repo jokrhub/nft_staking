@@ -37,7 +37,7 @@ export const ADMIN_ADDRESS = [admin account address];
 ```
 Note: Ensure all addresses are prefixed with `0x` in `config.tsx`
 
-3. Import `creator` and `admin` account into your wallet in browser
+3. Import `creator` and `admin` account into your wallet in browser using private keys
 4. npm install
 5. npm start
 
