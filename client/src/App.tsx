@@ -1,216 +1,326 @@
-import { Layout, Row, Col, Button, Card, Spin, Skeleton} from "antd";
+import { Layout, Row, Col, Card, Skeleton, Empty, Button, notification } from "antd";
+import { ReloadOutlined } from '@ant-design/icons';
 import { WalletSelector } from "@aptos-labs/wallet-adapter-ant-design";
 import "@aptos-labs/wallet-adapter-ant-design/dist/index.css";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { useState, useEffect } from "react";
-import { Network, Provider, AptosClient, AptosAccount, TokenClient, FaucetClient, CoinClient } from "aptos";
 
-const NODE_URL = "https://fullnode.devnet.aptoslabs.com";
-const FAUCET_URL = "https://faucet.devnet.aptoslabs.com";
+import { Network, Provider, AptosClient, AptosAccount, TokenClient, FaucetClient, HexString } from "aptos";
+import { NODE_URL, FAUCET_URL, CREATOR_ADDRESS, CREATOR_PKEY, MODULE_ADDRESS, ADMIN_PKEY, ADMIN_ADDRESS } from "./config";
 
 const client = new AptosClient(NODE_URL);
 const faucetClient = new FaucetClient(NODE_URL, FAUCET_URL);
 const tokenClient = new TokenClient(client)
 
-type TokenId = {
-  token_data_id: any,
-  property_version: number
-}
+const pkey = new HexString(CREATOR_PKEY).toUint8Array();
+const creator = new AptosAccount(pkey, CREATOR_ADDRESS);
 
+const admin_pkey = new HexString(ADMIN_PKEY).toUint8Array();
+const admin = new AptosAccount(admin_pkey, ADMIN_ADDRESS);
+
+const provider = new Provider(Network.DEVNET);
+
+type NotificationType = 'success' | 'error';
+type Action = 'stake' | 'unstake' | 'claimRewardsForToken' | 'updateRewards';
 
 function App() {
 
-  const MODULE_ADDRESS = "0xcafe";
-
-  const { account } = useWallet();
-  const provider = new Provider(Network.DEVNET);
-
-  const [hasStakes, setHasStakes] = useState(false);
-  const [stakes, setStakes] = useState([]);
+  const { account, signAndSubmitTransaction, signTransaction } = useWallet();
+  const [stakesLoader, setStakesLoader] = useState(true);
+  const [tokensLoader, setTokensLoader] = useState(true);
+  const [userStakes, setUserStakes] = useState<any[]>([]);
   const [userTokens, setUserTokens] = useState([]);
-  const [loader, setLoader] = useState(false);
+  const [showError, setIsError] = useState()
 
-  const client = new AptosClient(NODE_URL);
-  const faucetClient = new FaucetClient(NODE_URL, FAUCET_URL);
+  const [api, contextHolder] = notification.useNotification();
 
-  const tokenClient = new TokenClient(client);
-  const coinClient = new CoinClient(client);
-
-  const creator = new AptosAccount();
-  const nft_staker = new AptosAccount();
+  console.log("Moduele address:", MODULE_ADDRESS);
+  console.log("Admin address:", ADMIN_ADDRESS);
+  console.log("Creator address:", CREATOR_ADDRESS);
+  console.log("Current address:", account?.address);
 
   useEffect(() => {
-    setLoader(true);
     if (account?.address) {
       setup();
-      fetchStakes();
+      depositFunds();
+      fetchUserTokens();
+      fetchUserStakes();
     }
   }, [account?.address]);
 
+  const openNotification = (type: NotificationType, message: string, description: string | undefined) => {
+    api[type]({
+      message: message,
+      description: description,
+      duration: 4,
+      placement: "topLeft"
+    });
+  };
+
   const setup = async () => {
 
-    await faucetClient.fundAccount(creator.address(), 100_000_000);
-    await faucetClient.fundAccount(nft_staker.address(), 100_000_000);
+    await faucetClient.fundAccount(creator.address(), 100_000_000_000);
+    await faucetClient.fundAccount(MODULE_ADDRESS, 100_000_000_000);
+    await faucetClient.fundAccount(admin.address(), 100_000_000_000);
 
-    const collectionName = "creator's";
-    const tokenName = "creator's first token";
-    const tokenPropertyVersion = 0;
+    if (account?.address != CREATOR_ADDRESS) return
 
-    const tokenId = {
-      token_data_id: {
-        creator: creator.address().hex(),
-        collection: collectionName,
-        name: tokenName,
-      },
-      property_version: `${tokenPropertyVersion}`,
-    };
+    const collectionName = `Collection ${(Math.random() + 1).toString(36).substring(7)}`;
+    const tokenName = `Token ${(Math.random() + 1).toString(36).substring(7)}`;
 
-    const txnHash1 = await tokenClient.createCollection(
-      creator,
-      collectionName,
-      "creator's simple collection",
-      "https://creator.com",
-    );
-    await client.waitForTransaction(txnHash1, { checkSuccess: true });
+    try {
 
-    const txnHash2 = await tokenClient.createToken(
-      creator,
-      collectionName,
-      tokenName,
-      "creator's simple token",
-      1,
-      "https://aptos.dev/img/nyan.jpeg",
-    );
-    await client.waitForTransaction(txnHash2, { checkSuccess: true });
+      const txnHash1 = await tokenClient.createCollection(
+        creator,
+        collectionName,
+        "creator's simple collection",
+        "https://creator.com",
+      );
+      await client.waitForTransaction(txnHash1, { checkSuccess: true });
 
-    const aliceBalance1 = await tokenClient.getToken(
-      creator.address(),
-      collectionName,
-      tokenName,
-      `${tokenPropertyVersion}`,
-    );
+      const txnHash2 = await tokenClient.createToken(
+        creator,
+        collectionName,
+        tokenName,
+        "creator's simple token",
+        1,
+        "https://aptos.dev/img/nyan.jpeg",
+      );
+      await client.waitForTransaction(txnHash2, { checkSuccess: true });
 
-    const userNfts: any = []
-    const nft_list = (await provider.getAccountNFTs(creator.address().hex())).current_token_ownerships;
-    console.log(nft_list);
+      openNotification('success', "Setup succesfull. Created collection and tokens", "");
 
-    nft_list.forEach(nft => {
-      userNfts.push({
-        token_data_id: {
-          creator: nft.current_token_data?.creator_address,
-          collection: nft.current_token_data?.collection_name,
-          name: nft.current_token_data?.name,
-        },
-        property_version: nft.property_version,
-      })
-    })
+    } catch (e: any) {
+      console.log("Error in setup: ", e)
+      openNotification('error', "Error in setup", "Please change the collection and token names in config");
 
-    setUserTokens(userNfts);
-    setLoader(false);
+    } finally {
+      fetchUserTokens();
+    }
 
+  }
+
+  const depositFunds = async () => {
+
+    if (account?.address != ADMIN_ADDRESS) return
+    try {
+      const payload = {
+        type: "entry_function_payload",
+        function: `${MODULE_ADDRESS}::staking::deposit_funds`,
+        type_arguments: [],
+        arguments: [100_000_000],
+      };
+      const txnHash3 = await signAndSubmitTransaction(payload);
+      console.log("resonse:", txnHash3)
+      openNotification("success", "Deposit successfull", "");
+    } catch (e: any) {
+      console.log("Error in deposit: ", e)
+    }
   }
 
   const fetchUserTokens = async () => {
-
     if (!account) return [];
-    
+    if (account?.address != CREATOR_ADDRESS) return;
+
+    try {
+      const userNfts: any = []
+      const nft_list = (await provider.getAccountNFTs(creator.address().hex())).current_token_ownerships;
+
+      nft_list.forEach(nft => {
+        userNfts.push({
+          creator: nft.current_token_data?.creator_address,
+          collection: nft.current_token_data?.collection_name,
+          name: nft.current_token_data?.name,
+          property_version: nft.property_version,
+        })
+      })
+      console.log("user tokes : ", userNfts);
+      setUserTokens(userNfts);
+    } catch (e: any) {
+      console.log("error", e)
+      openNotification("success", "No token available", "");
+    } finally {
+      setTokensLoader(false);
+    }
+
   }
 
-  const stakeNft = async (creator: string, collection_name: string, token_name: string, token_property_version: number) => {
-
-  }
-
-  const fetchStakes = async () => {
+  const fetchUserStakes = async () => {
     if (!account) return [];
+    if (account?.address != CREATOR_ADDRESS) return;
+
     try {
       const UserStakeInfoResource = await provider.getAccountResource(
         account?.address,
         `${MODULE_ADDRESS}::staking::UserStakeInfo`
       );
-      setHasStakes(true);
 
       const tableHandle = (UserStakeInfoResource as any).data.stakes.handle;
       const stake_keys: [] = (UserStakeInfoResource as any).data.stake_keys;
 
-      let stakes = [];
+      let stakes: any = [];
 
-      for (let index = 1; index <= stake_keys.length; index++) {
+      for (let index = 0; index <= stake_keys.length - 1; index++) {
+        const tokenId: any = stake_keys[index];
         const tableItem = {
           key_type: "0x3::token::TokenId",
-          value_type: `${MODULE_ADDRESS}::todolist::Task`,
-          key: stake_keys[index]
+          value_type: `${MODULE_ADDRESS}::staking::StakeInfo`,
+          key: tokenId
         };
-        const stake = await provider.getTableItem(tableHandle, tableItem);
+        const stake: any = await provider.getTableItem(tableHandle, tableItem);
+        stake['creator'] = tokenId.token_data_id?.creator;
+        stake['collection'] = tokenId.token_data_id?.collection;
+        stake['name'] = tokenId.token_data_id?.name;
+        stake['property_version'] = tokenId.property_version;
+
         stakes.push(stake);
+
+        console.log("stake: ", stake)
       }
 
-      console.log("staked", stakes)
+      setUserStakes(stakes);
+      console.log("user stakes: ", stakes)
 
     } catch (e: any) {
-      setHasStakes(false);
+      console.log("error", e)
+      openNotification("success", "No stakes available", "");
+    } finally {
+      setStakesLoader(false)
+    }
+
+  }
+
+  const performAction = async (action: Action, creator: string | undefined, collection_name: string, token_name: string, token_property_version: number) => {
+    if (!account) return;
+
+    const payload = {
+      type: "entry_function_payload",
+      function: `${MODULE_ADDRESS}::staking::${action}`,
+      type_arguments: [],
+      arguments: [creator, collection_name, token_name, token_property_version],
+    };
+
+    try {
+      // sign and submit transaction to chain
+      const response = await signAndSubmitTransaction(payload);
+      // wait for transaction
+      await provider.waitForTransaction(response.hash);
+
+      if (action == 'stake')
+        openNotification("success", "Stake successfull", "");
+      else if (action == 'unstake')
+        openNotification("success", "Unstake successfull", "");
+      else if (action == 'claimRewardsForToken')
+        openNotification("success", "Rewards claimed successfully", "");
+      else if (action == 'updateRewards')
+        openNotification("success", "Rewards updated successfully", "");
+
+    } catch (error: any) {
+      console.log("error", error);
+
+      if (action == 'stake')
+        openNotification("success", "Error in staking token", "")
+      else if (action == 'unstake')
+        openNotification("error", "Error while unstaking token.", "No funds in contract to unstake. Please select admin wallet to deposit funds");
+      else if (action == 'claimRewardsForToken')
+        openNotification("error", "Error while claiming rewards.", "No funds in contract to unstake. Please select admin wallet to deposit funds");
+      else if (action == 'updateRewards')
+        openNotification("error", "Error in updating rewards", "");
+    } finally {
+      fetchUserTokens();
+      fetchUserStakes();
     }
   }
 
   return (
-    <> 
-      <Layout>
-        <Row align="middle">
-          <Col span={10} offset={2}>
+    <>
+      {contextHolder}
+      <Layout style={{marginBottom: "100px"}}>
+        <Row align="middle" style={{ margin: "0px 20px" }} gutter={[32, 32]}>
+          <Col span={7}>
             <h1>NFT staking</h1>
           </Col>
-          <Col span={12} style={{ textAlign: "right", paddingRight: "200px" }}>
+          <Col span={5} style={{ textAlign: "right" }}>
+            <h3>{account?.address == ADMIN_ADDRESS ? "ADMIN" : "STAKER"}</h3>
+          </Col>
+          <Col span={12} style={{ textAlign: "right" }}>
             <WalletSelector />
           </Col>
         </Row>
       </Layout>
 
-      <Row justify="center" gutter={[40, 40]} style={{ margin: "5rem 30rem" }}>
-        <Col span={4}>
-          <h1> Collection</h1>
+      <Row gutter={[32,32]} style={{margin:'30px'}}>
+        <Col span={12}>
+          <Row gutter={[32,32]} style={{margin:'100px', padding: "50px", backgroundColor: "#f5f5f5", borderRadius: "10px", height: "80vh", overflow: "auto"}}>
+            <Col span={24}>
+              <h1> Collection</h1>
+            </Col>
+            {
+              tokensLoader ?
+                [1, 2, 3, 4, 5, 6].map(() => (
+                  <Col sm={24} md={12}>
+                    <Card>
+                      <Skeleton active />
+                    </Card>
+                  </Col>
+                ))
+                :
+                userTokens.length == 0 ? <Empty /> : userTokens.map((nft: any) => (
+                  <Col sm={24} md={11}>
+                    <Card title="Card title" bordered={true}
+                      actions={[
+                        <div onClick={async () => { await performAction('stake', nft.creator, nft.collection, nft.name, nft.property_version) }}> Stake </div>
+                      ]}
+                    >
+                      <p>{nft.name}</p>
+                      <p>{nft.collection}</p>
+
+                    </Card>
+                  </Col>
+                ))
+            }
+          </Row>
+        </Col>
+
+        <Col span={12}>
+          <Row gutter={[32,32]} style={{margin:'100px', padding: "50px", backgroundColor: "#f5f5f5", borderRadius: "10px",  height: "80vh", overflow: "auto"}}>
+            <Col span={24}>
+              <h1> Staked tokens</h1>
+            </Col>
+            {
+              stakesLoader ?
+                [1, 2, 3, 4, 5, 6].map(() => (
+                  <Col sm={24} md={12}>
+                    <Card>
+                      <Skeleton active />
+                    </Card>
+                  </Col>
+                ))
+                :
+                userStakes.length == 0 ? <Empty /> : userStakes.map((nft: any) => (
+                  <Col sm={24} md={11}>
+                    <Card title="Card title" bordered={true}
+                      actions={[
+                        <div onClick={async () => { await performAction('unstake', nft.creator, nft.collection, nft.name, nft.property_version) }}> Unstake </div>,
+                        <div onClick={async () => { await performAction('claimRewardsForToken', nft.creator, nft.collection, nft.name, nft.property_version) }}> Claim </div>
+                      ]}
+                      extra={
+                        <Button type="link" onClick={async () => { await performAction('updateRewards', nft.creator, nft.collection, nft.name, nft.property_version) }}>
+                          <ReloadOutlined />
+                        </Button>
+                      }
+                    >
+                      <p>{nft.name}</p>
+                      <p>{nft.collection}</p>
+                      <p>Rewards: {nft.pendingRewards}</p>
+
+                    </Card>
+                  </Col>
+                ))
+            }
+          </Row>
         </Col>
       </Row>
-
-    
-      <Row justify="center" gutter={[40, 40]} style={{ margin: "5rem 30rem" }}>
-        {
-          loader ? 
-          [1,2,3].map(()=>(
-            <Col sm={24} md={12} lg={8}>
-              <Card>
-                <Skeleton active />
-              </Card>
-            </Col>
-          ))
-          :
-          userTokens.map((nft: any) => (
-            <Col sm={24} md={12} lg={8}>
-              <Card title="Card title" bordered={true}
-                actions={[
-                  <> Claim Rewards </>,
-                  <>Unstake</>
-                ]}
-              >
-                <p>{nft.token_data_id.name}</p>
-                <p>{nft.token_data_id.collection}</p>
-
-              </Card>
-            </Col>
-          ))
-        }
-      </Row>
-
-      <Row justify={"center"} gutter={[0, 32]} style={{ marginTop: "5rem" }}>
-        <Col span={4}>
-          <Button
-            block
-            type="primary"
-            style={{ height: "40px", backgroundColor: "#3f67ff" }}
-          >
-            Stake NFT
-          </Button>
-        </Col>
-      </Row>
-        
     </>
   );
 }

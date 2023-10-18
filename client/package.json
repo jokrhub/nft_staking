@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@ant-design/icons": "^5.2.6",
     "@aptos-labs/wallet-adapter-ant-design": "^1.0.0",
     "@aptos-labs/wallet-adapter-react": "^1.0.2",
     "@testing-library/jest-dom": "^5.17.0",
