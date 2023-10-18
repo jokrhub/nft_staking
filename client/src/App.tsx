@@ -59,10 +59,15 @@ function App() {
 
   const setup = async () => {
 
-    await faucetClient.fundAccount(creator.address(), 100_000_000_000);
-    await faucetClient.fundAccount(MODULE_ADDRESS, 100_000_000_000);
-    await faucetClient.fundAccount(admin.address(), 100_000_000_000);
+    try {
+      await faucetClient.fundAccount(creator.address(), 100_000_000_000);
+      await faucetClient.fundAccount(MODULE_ADDRESS, 100_000_000_000);
+      await faucetClient.fundAccount(admin.address(), 100_000_000_000);
+    } catch (e: any) {
+      console.log("Limit exeeded: ", e)
+    }
 
+    
     if (account?.address != CREATOR_ADDRESS) return
 
     const collectionName = `Collection ${(Math.random() + 1).toString(36).substring(7)}`;
@@ -267,7 +272,7 @@ function App() {
                 :
                 userTokens.length == 0 ? <Empty /> : userTokens.map((nft: any) => (
                   <Col sm={24} md={11}>
-                    <Card title="Card title" bordered={true}
+                    <Card title="NFT" bordered={true}
                       actions={[
                         <div onClick={async () => { await performAction('stake', nft.creator, nft.collection, nft.name, nft.property_version) }}> Stake </div>
                       ]}
@@ -299,7 +304,7 @@ function App() {
                 :
                 userStakes.length == 0 ? <Empty /> : userStakes.map((nft: any) => (
                   <Col sm={24} md={11}>
-                    <Card title="Card title" bordered={true}
+                    <Card title="Stake Info" bordered={true}
                       actions={[
                         <div onClick={async () => { await performAction('unstake', nft.creator, nft.collection, nft.name, nft.property_version) }}> Unstake </div>,
                         <div onClick={async () => { await performAction('claimRewardsForToken', nft.creator, nft.collection, nft.name, nft.property_version) }}> Claim </div>
